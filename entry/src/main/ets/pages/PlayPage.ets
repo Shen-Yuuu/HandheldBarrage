@@ -46,9 +46,12 @@ struct PlayPage {
     }
     .width('100%')
     .height('100%')
-    .onClick(() => {
-      router.back();
-    })
+    .gesture(
+      TapGesture({ count: 2 })
+        .onAction(() => {
+          router.back();
+        })
+    )
   }
 
   pageTransition() {

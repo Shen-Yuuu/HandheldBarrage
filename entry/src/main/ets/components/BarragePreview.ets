@@ -353,8 +353,9 @@ struct NormalText {
       .letterSpacing(this.letterSpacing)
       .lineHeight(this.lineHeight > 0 ? this.lineHeight : undefined)
       .decoration({ type: this.decorationType, color: this.decorationColor })
-      .maxLines(this.isVertical ? undefined : 1)
+      .maxLines(undefined) // 不限制行数，确保内容完整显示
       .textOverflow({ overflow: TextOverflow.None })
+      .constraintSize({ minWidth: 0, maxWidth: Infinity, minHeight: 0, maxHeight: Infinity }) // 允许无限尺寸
       .opacity(this.textOpacity)
       .textShadow(this.hasShadow ? {
         radius: 12,
