@@ -1,11 +1,29 @@
 import { BarrageConfig, BarrageSegment } from '../model/BarrageConfig';
 
 /**
- * 渐变文字组件 - 修复版本
- * 核心修复：
- * 1. 使用 measureText 获取真实文本宽度
- * 2. 大幅增加安全边距
- * 3. 确保字体大小与普通文字一致
+ * Canvas 字体权重转换
+ */
+function toCanvasFontWeight(fontWeight: FontWeight): number {
+  switch (fontWeight) {
+    case FontWeight.Lighter:
+      return 100;
+    case FontWeight.Normal:
+      return 400;
+    case FontWeight.Regular:
+      return 400;
+    case FontWeight.Medium:
+      return 500;
+    case FontWeight.Bold:
+      return 700;
+    case FontWeight.Bolder:
+      return 900;
+    default:
+      return 400;
+  }
+}
+
+/**
+ * 渐变文字组件
  */
 @Component
 struct GradientText {
@@ -18,314 +36,239 @@ struct GradientText {
   @Prop @Watch('onPropsChange') lineHeight: number = 0;
   @Prop decorationType: TextDecorationType = TextDecorationType.None;
   @Prop decorationColor: ResourceColor = Color.White;
-  @Prop @Watch('onPropsChange') gradientColors: Array<[string, number]> = [['#FF0000', 0], ['#0000FF', 1]];
+  @Prop @Watch('onPropsChange') gradientColors: Array<[string, number]> =
+    [['#FF0000', 0], ['#0000FF', 1]];
   @Prop @Watch('onPropsChange') gradientDirection: number = 90;
   @Prop textOpacity: number = 1;
   @Prop @Watch('onPropsChange') hasShadow: boolean = false;
   @Prop @Watch('onPropsChange') isVertical: boolean = false;
+  @Prop @Watch('onPropsChange') strokeEnabled: boolean = false;
+  @Prop @Watch('onPropsChange') strokeColor: string = '#000000';
+  @Prop @Watch('onPropsChange') strokeWidth: number = 2;
 
   private settings: RenderingContextSettings = new RenderingContextSettings(true);
   private context: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.settings);
+  private isCanvasReady: boolean = false;
+  @State measuredWidth: number = 0;
+  @State measuredHeight: number = 0;
 
-  @State canvasWidth: number = 100;
-  @State canvasHeight: number = 100;
-  @State isReady: boolean = false;
+  onPropsChange(): void {
+    this.requestDraw();
+  }
 
-  // 缓存测量结果
-  private measuredTextWidth: number = 0;
-  private measuredTextHeight: number = 0;
-
-  onPropsChange() {
-    if (this.isReady) {
-      this.measureAndDraw();
+  private requestDraw(): void {
+    if (this.isCanvasReady && this.measuredWidth > 0 && this.measuredHeight > 0) {
+      setTimeout(() => this.draw(), 0);
     }
+  }
+
+  private getLineHeight(): number {
+    return this.lineHeight > 0 ? this.lineHeight : this.fontSize * 1.25;
+  }
+
+  private getFontSizeInPx(): number {
+    return vp2px(this.fontSize);
+  }
+
+  /**
+   * 构建 Canvas 字体字符串
+   * familyName 直接使用 config 传入的值，与注册时的名称一致
+   */
+  private buildCanvasFont(): string {
+    const style = this.fontStyle === FontStyle.Italic ? 'italic' : 'normal';
+    const numericWeight = toCanvasFontWeight(this.fontWeight);
+    let weight: string;
+    if (numericWeight >= 700) {
+      weight = 'bold';
+    } else if (numericWeight >= 500) {
+      weight = '500';
+    } else {
+      weight = 'normal';
+    }
+    const fontSizePx = this.getFontSizeInPx();
+    return `${style} ${weight} ${fontSizePx}px "${this.fontFamily}"`;
   }
 
   build() {
-    Canvas(this.context)
-      .width(this.canvasWidth)
-      .height(this.canvasHeight)
-      .onReady(() => {
-        this.isReady = true;
-        this.measureAndDraw();
-      })
-      .opacity(this.textOpacity)
-  }
+    Stack() {
+      Text(this.text)
+        .fontSize(this.fontSize)
+        .fontColor(Color.Transparent)
+        .fontWeight(this.fontWeight)
+        .fontStyle(this.fontStyle)
+        .fontFamily(this.fontFamily)
+        .letterSpacing(this.letterSpacing)
+        .lineHeight(this.getLineHeight())
+        .maxLines(this.isVertical ? undefined : 1)
+        .constraintSize({ maxWidth: 99999 })
+        .textOverflow({ overflow: TextOverflow.Clip })
+        .opacity(0)
+        .onAreaChange((_oldArea: Area, newArea: Area) => {
+          const w = newArea.width as number;
+          const h = newArea.height as number;
+          if (w > 0 && h > 0) {
+            const changed = Math.abs(w - this.measuredWidth) > 0.5 ||
+              Math.abs(h - this.measuredHeight) > 0.5;
+            if (changed) {
+              this.measuredWidth = w;
+              this.measuredHeight = h;
+              this.requestDraw();
+            }
+          }
+        })
 
-  private getFontWeightValue(): number {
-    switch (this.fontWeight) {
-      case FontWeight.Lighter:
-        return 100;
-      case FontWeight.Normal:
-        return 400;
-      case FontWeight.Regular:
-        return 400;
-      case FontWeight.Medium:
-        return 500;
-      case FontWeight.Bold:
-        return 700;
-      case FontWeight.Bolder:
-        return 900;
-      default:
-        return 400;
+      Canvas(this.context)
+        .width(this.measuredWidth > 0 ? this.measuredWidth : 1)
+        .height(this.measuredHeight > 0 ? this.measuredHeight : 1)
+        .onReady(() => {
+          this.isCanvasReady = true;
+          if (this.measuredWidth > 0 && this.measuredHeight > 0) {
+            this.draw();
+          }
+        })
     }
+    .opacity(this.textOpacity)
+    .alignContent(Alignment.TopStart)
   }
 
-  private getTextSafe(): string {
-    return this.text || '';
-  }
-
-  private buildFontString(): string {
-    const fontStyleStr = this.fontStyle === FontStyle.Italic ? 'italic' : 'normal';
-    const fontWeightVal = this.getFontWeightValue();
-    return `${fontStyleStr} ${fontWeightVal} ${this.fontSize}px "${this.fontFamily}"`;
-  }
-
-  measureAndDraw(): void {
-    if (!this.isReady) {
-      return;
-    }
-
-    const safeText = this.getTextSafe();
-    if (safeText.length === 0) {
-      this.canvasWidth = 10;
-      this.canvasHeight = 10;
+  private draw(): void {
+    if (!this.isCanvasReady || this.measuredWidth <= 0 || this.measuredHeight <= 0) {
       return;
     }
 
     const ctx = this.context;
+    const w = this.measuredWidth;
+    const h = this.measuredHeight;
 
-    // 设置字体以便测量
-    ctx.font = this.buildFontString();
-
-    let width: number;
-    let height: number;
-
-    // 阴影需要的额外空间
-    const shadowOffset = this.hasShadow ? 20 : 0;
-    // 基础边距 - 大幅增加以确保大字体不被裁剪
-    const basePadding = Math.max(20, this.fontSize * 0.3);
-
-    if (this.isVertical) {
-      // 竖向布局
-      const chars = safeText.split('');
-      let maxCharWidth: number = 0;
-
-      // 测量每个字符的宽度，取最大值
-      for (let i = 0; i < chars.length; i++) {
-        const charMetrics = ctx.measureText(chars[i]);
-        if (charMetrics.width > maxCharWidth) {
-          maxCharWidth = charMetrics.width;
-        }
-      }
-
-      const lineH = this.lineHeight > 0 ? this.lineHeight : this.fontSize * 1.4;
-      const totalHeight = chars.length * lineH;
-
-      // 宽度 = 最大字符宽度 + 边距 + 阴影
-      width = maxCharWidth + basePadding * 2 + shadowOffset;
-      // 高度 = 总行高 + 边距 + 阴影
-      height = totalHeight + basePadding * 2 + shadowOffset;
-
-      this.measuredTextWidth = maxCharWidth;
-      this.measuredTextHeight = totalHeight;
-    } else {
-      // 横向布局 - 使用 measureText 获取真实宽度
-      let totalTextWidth: number = 0;
-
-      if (this.letterSpacing === 0) {
-        // 无字间距，直接测量整个文本
-        const metrics = ctx.measureText(safeText);
-        totalTextWidth = metrics.width;
-      } else {
-        // 有字间距，需要逐字测量并加上间距
-        const chars = safeText.split('');
-        for (let i = 0; i < chars.length; i++) {
-          totalTextWidth += ctx.measureText(chars[i]).width;
-        }
-        // 加上字间距（字符数-1 个间距）
-        totalTextWidth += this.letterSpacing * Math.max(0, chars.length - 1);
-      }
-
-      // 宽度 = 文本宽度 + 边距 + 阴影
-      width = totalTextWidth + basePadding * 2 + shadowOffset;
-      // 高度 = 字体大小 * 1.5（考虑上下行高）+ 边距 + 阴影
-      height = this.fontSize * 1.6 + basePadding * 2 + shadowOffset;
-
-      this.measuredTextWidth = totalTextWidth;
-      this.measuredTextHeight = this.fontSize;
-    }
-
-    // 确保最小尺寸
-    width = Math.max(50, Math.ceil(width));
-    height = Math.max(50, Math.ceil(height));
-
-    // 检查尺寸是否需要更新
-    if (Math.abs(this.canvasWidth - width) > 2 || Math.abs(this.canvasHeight - height) > 2) {
-      this.canvasWidth = width;
-      this.canvasHeight = height;
-
-      // 延迟绘制，等待 Canvas 尺寸更新完成
-      setTimeout(() => {
-        this.draw();
-      }, 20);
-    } else {
-      this.draw();
-    }
-  }
-
-  draw(): void {
-    if (!this.isReady) {
-      return;
-    }
-
-    const ctx = this.context;
-    const width = this.canvasWidth;
-    const height = this.canvasHeight;
-
-    // 清空画布
-    ctx.clearRect(0, 0, width, height);
-
-    // 设置字体
-    ctx.font = this.buildFontString();
+    ctx.clearRect(0, 0, w * 2, h * 2);
+    ctx.font = this.buildCanvasFont();
     ctx.textBaseline = 'middle';
 
     if (this.isVertical) {
-      this.drawVerticalText(ctx, width, height);
+      this.drawVerticalText(ctx, w, h);
     } else {
-      this.drawHorizontalText(ctx, width, height);
+      this.drawHorizontalText(ctx, w, h);
     }
   }
 
-  drawHorizontalText(ctx: CanvasRenderingContext2D, width: number, height: number) {
-    const safeText = this.getTextSafe();
-    if (safeText.length === 0) {
-      return;
-    }
+  private drawHorizontalText(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+    const text = this.text || '';
+    if (text.length === 0) return;
 
-    // 计算绘制起始位置（居中）
-    const shadowOffset = this.hasShadow ? 10 : 0;
-    const centerX = (width - shadowOffset) / 2;
-    const centerY = (height - shadowOffset) / 2;
+    const centerX = w / 2;
+    const centerY = h / 2;
 
-    // 创建渐变
     const angle = this.gradientDirection * (Math.PI / 180);
-    const gradientLength = Math.max(this.measuredTextWidth, width) / 2;
-    const dx = Math.cos(angle) * gradientLength;
-    const dy = Math.sin(angle) * gradientLength;
-
+    const diagonal = Math.sqrt(w * w + h * h) / 2;
+    const dx = Math.cos(angle) * diagonal;
+    const dy = Math.sin(angle) * diagonal;
     const gradient = ctx.createLinearGradient(
       centerX - dx, centerY - dy,
       centerX + dx, centerY + dy
     );
 
     for (let i = 0; i < this.gradientColors.length; i++) {
-      const colorStop = this.gradientColors[i];
-      gradient.addColorStop(colorStop[1], colorStop[0]);
+      const cs = this.gradientColors[i];
+      gradient.addColorStop(Math.max(0, Math.min(1, cs[1])), cs[0]);
     }
 
-    // 设置阴影
-    if (this.hasShadow) {
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
-      ctx.shadowBlur = 12;
-      ctx.shadowOffsetX = 5;
-      ctx.shadowOffsetY = 5;
+    if (this.strokeEnabled && this.strokeWidth > 0) {
+      ctx.save();
+      ctx.strokeStyle = this.strokeColor;
+      ctx.lineWidth = this.strokeWidth * 2;
+      ctx.lineJoin = 'round';
+      ctx.miterLimit = 2;
+      if (this.letterSpacing > 0) {
+        this.drawCharsWithSpacing(ctx, text, centerX, centerY, true);
+      } else {
+        ctx.textAlign = 'center';
+        ctx.strokeText(text, centerX, centerY);
+      }
+      ctx.restore();
+      ctx.font = this.buildCanvasFont();
+      ctx.textBaseline = 'middle';
     }
 
-    // 绘制文字
+    this.applyShadow(ctx);
     ctx.fillStyle = gradient;
-    ctx.textAlign = 'center';
-
-    if (this.letterSpacing === 0) {
-      ctx.fillText(safeText, centerX, centerY);
+    if (this.letterSpacing > 0) {
+      this.drawCharsWithSpacing(ctx, text, centerX, centerY, false);
     } else {
-      this.drawTextWithSpacing(ctx, safeText, centerX, centerY);
+      ctx.textAlign = 'center';
+      ctx.fillText(text, centerX, centerY);
     }
-
-    // 重置阴影
-    if (this.hasShadow) {
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
-    }
+    this.resetShadow(ctx);
   }
 
-  drawVerticalText(ctx: CanvasRenderingContext2D, width: number, height: number) {
-    const safeText = this.getTextSafe();
-    if (safeText.length === 0) {
-      return;
-    }
+  private drawVerticalText(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+    const text = this.text || '';
+    if (text.length === 0) return;
 
-    const chars = safeText.split('');
-    const lineH = this.lineHeight > 0 ? this.lineHeight : this.fontSize * 1.4;
-    const totalHeight = chars.length * lineH;
+    const chars = text.split('');
+    const lineH = this.getLineHeight();
+    const totalH = chars.length * lineH;
+    const centerX = w / 2;
+    const startY = (h - totalH) / 2 + lineH / 2;
 
-    const shadowOffset = this.hasShadow ? 10 : 0;
-    const centerX = (width - shadowOffset) / 2;
-    const startY = (height - shadowOffset - totalHeight) / 2 + lineH / 2;
-
-    // 创建垂直渐变
-    const gradient = ctx.createLinearGradient(0, startY - lineH / 2, 0, startY + totalHeight);
+    const gradient = ctx.createLinearGradient(0, startY - lineH / 2, 0, startY + totalH);
     for (let i = 0; i < this.gradientColors.length; i++) {
-      const colorStop = this.gradientColors[i];
-      gradient.addColorStop(colorStop[1], colorStop[0]);
+      const cs = this.gradientColors[i];
+      gradient.addColorStop(Math.max(0, Math.min(1, cs[1])), cs[0]);
     }
 
-    // 设置阴影
-    if (this.hasShadow) {
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
-      ctx.shadowBlur = 12;
-      ctx.shadowOffsetX = 5;
-      ctx.shadowOffsetY = 5;
-    }
-
+    this.applyShadow(ctx);
     ctx.fillStyle = gradient;
     ctx.textAlign = 'center';
-
     let y = startY;
     for (let i = 0; i < chars.length; i++) {
       ctx.fillText(chars[i], centerX, y);
       y += lineH;
     }
-
-    // 重置阴影
-    if (this.hasShadow) {
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
-    }
+    this.resetShadow(ctx);
   }
 
-  drawTextWithSpacing(ctx: CanvasRenderingContext2D, text: string, centerX: number, centerY: number) {
+  private drawCharsWithSpacing(ctx: CanvasRenderingContext2D, text: string,
+    centerX: number, centerY: number, isStroke: boolean): void {
     const chars = text.split('');
     const charWidths: number[] = [];
     let totalWidth = 0;
-
-    // 测量每个字符宽度
     for (let i = 0; i < chars.length; i++) {
-      const w = ctx.measureText(chars[i]).width;
-      charWidths.push(w);
-      totalWidth += w;
-      if (i < chars.length - 1) {
-        totalWidth += this.letterSpacing;
-      }
+      const cw = ctx.measureText(chars[i]).width;
+      charWidths.push(cw);
+      totalWidth += cw;
+      if (i < chars.length - 1) totalWidth += this.letterSpacing;
     }
-
-    // 从居中位置开始绘制
     let x = centerX - totalWidth / 2;
     ctx.textAlign = 'left';
-
     for (let i = 0; i < chars.length; i++) {
-      ctx.fillText(chars[i], x, centerY);
-      x += charWidths[i] + this.letterSpacing;
+      if (isStroke) {
+        ctx.strokeText(chars[i], x, centerY);
+      } else {
+        ctx.fillText(chars[i], x, centerY);
+      }
+      x += charWidths[i] + (i < chars.length - 1 ? this.letterSpacing : 0);
     }
   }
-}
 
+  private applyShadow(ctx: CanvasRenderingContext2D): void {
+    if (this.hasShadow) {
+      const s = Math.max(2, this.fontSize * 0.06);
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+      ctx.shadowBlur = s * 1.5;
+      ctx.shadowOffsetX = s;
+      ctx.shadowOffsetY = s;
+    }
+  }
+
+  private resetShadow(ctx: CanvasRenderingContext2D): void {
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+  }
+}
 /**
- * 普通文字组件 - 支持阴影
+ * 普通文字组件
  */
 @Component
 struct NormalText {
@@ -342,27 +285,101 @@ struct NormalText {
   @Prop textOpacity: number = 1;
   @Prop hasShadow: boolean = false;
   @Prop isVertical: boolean = false;
+  @Prop strokeEnabled: boolean = false;
+  @Prop strokeColor: string = '#000000';
+  @Prop strokeWidth: number = 2;
+
+  private getLineHeight(): number {
+    return this.lineHeight > 0 ? this.lineHeight : this.fontSize * 1.25;
+  }
+
+  private buildShadow(): ShadowOptions | undefined {
+    if (!this.hasShadow) {
+      return undefined;
+    }
+    return {
+      radius: Math.max(4, this.fontSize * 0.08),
+      color: 'rgba(0, 0, 0, 0.6)',
+      offsetX: Math.max(2, this.fontSize * 0.04),
+      offsetY: Math.max(2, this.fontSize * 0.04)
+    };
+  }
 
   build() {
-    Text(this.text)
-      .fontSize(this.fontSize)
-      .fontColor(this.fontColor)
-      .fontWeight(this.fontWeight)
-      .fontStyle(this.fontStyle)
-      .fontFamily(this.fontFamily)
-      .letterSpacing(this.letterSpacing)
-      .lineHeight(this.lineHeight > 0 ? this.lineHeight : undefined)
-      .decoration({ type: this.decorationType, color: this.decorationColor })
-      .maxLines(undefined) // 不限制行数，确保内容完整显示
-      .textOverflow({ overflow: TextOverflow.None })
-      .constraintSize({ minWidth: 0, maxWidth: Infinity, minHeight: 0, maxHeight: Infinity }) // 允许无限尺寸
-      .opacity(this.textOpacity)
-      .textShadow(this.hasShadow ? {
-        radius: 12,
-        color: 'rgba(0, 0, 0, 0.6)',
-        offsetX: 5,
-        offsetY: 5
-      } : undefined)
+    Stack() {
+      if (this.strokeEnabled && this.strokeWidth > 0) {
+        Text(this.text)
+          .fontSize(this.fontSize)
+          .fontColor(this.strokeColor)
+          .fontWeight(this.fontWeight)
+          .fontStyle(this.fontStyle)
+          .fontFamily(this.fontFamily)
+          .letterSpacing(this.letterSpacing)
+          .lineHeight(this.getLineHeight())
+          .maxLines(this.isVertical ? undefined : 1)
+          .constraintSize({ maxWidth: 99999 })
+          .textOverflow({ overflow: TextOverflow.Clip })
+          .textShadow([
+            { radius: 0, color: this.strokeColor, offsetX: this.strokeWidth, offsetY: 0 },
+            { radius: 0, color: this.strokeColor, offsetX: -this.strokeWidth, offsetY: 0 },
+            { radius: 0, color: this.strokeColor, offsetX: 0, offsetY: this.strokeWidth },
+            { radius: 0, color: this.strokeColor, offsetX: 0, offsetY: -this.strokeWidth },
+            {
+              radius: 0,
+              color: this.strokeColor,
+              offsetX: this.strokeWidth * 0.7,
+              offsetY: this.strokeWidth * 0.7
+            },
+            {
+              radius: 0,
+              color: this.strokeColor,
+              offsetX: -this.strokeWidth * 0.7,
+              offsetY: this.strokeWidth * 0.7
+            },
+            {
+              radius: 0,
+              color: this.strokeColor,
+              offsetX: this.strokeWidth * 0.7,
+              offsetY: -this.strokeWidth * 0.7
+            },
+            {
+              radius: 0,
+              color: this.strokeColor,
+              offsetX: -this.strokeWidth * 0.7,
+              offsetY: -this.strokeWidth * 0.7
+            }
+          ])
+
+        Text(this.text)
+          .fontSize(this.fontSize)
+          .fontColor(this.fontColor)
+          .fontWeight(this.fontWeight)
+          .fontStyle(this.fontStyle)
+          .fontFamily(this.fontFamily)
+          .letterSpacing(this.letterSpacing)
+          .lineHeight(this.getLineHeight())
+          .decoration({ type: this.decorationType, color: this.decorationColor })
+          .maxLines(this.isVertical ? undefined : 1)
+          .constraintSize({ maxWidth: 99999 })
+          .textOverflow({ overflow: TextOverflow.Clip })
+          .textShadow(this.buildShadow())
+      } else {
+        Text(this.text)
+          .fontSize(this.fontSize)
+          .fontColor(this.fontColor)
+          .fontWeight(this.fontWeight)
+          .fontStyle(this.fontStyle)
+          .fontFamily(this.fontFamily)
+          .letterSpacing(this.letterSpacing)
+          .lineHeight(this.getLineHeight())
+          .decoration({ type: this.decorationType, color: this.decorationColor })
+          .maxLines(this.isVertical ? undefined : 1)
+          .constraintSize({ maxWidth: 99999 })
+          .textOverflow({ overflow: TextOverflow.Clip })
+          .textShadow(this.buildShadow())
+      }
+    }
+    .opacity(this.textOpacity)
   }
 }
 
@@ -379,6 +396,9 @@ struct BarrageSegmentItem {
   @Prop gradientEnabled: boolean = false;
   @Prop gradientColors: Array<[string, number]> = [];
   @Prop gradientDirection: number = 90;
+  @Prop strokeEnabled: boolean = false;
+  @Prop strokeColor: string = '#000000';
+  @Prop strokeWidth: number = 2;
 
   build() {
     if (this.layoutDirection === 'horizontal') {
@@ -404,7 +424,10 @@ struct BarrageSegmentItem {
         gradientDirection: this.gradientDirection,
         textOpacity: this.blinkOpacity,
         hasShadow: this.segment.hasShadow,
-        isVertical: false
+        isVertical: false,
+        strokeEnabled: this.strokeEnabled,
+        strokeColor: this.strokeColor,
+        strokeWidth: this.strokeWidth
       })
     } else {
       NormalText({
@@ -419,7 +442,10 @@ struct BarrageSegmentItem {
         decorationColor: this.segment.fontColor,
         textOpacity: this.blinkOpacity,
         hasShadow: this.segment.hasShadow,
-        isVertical: false
+        isVertical: false,
+        strokeEnabled: this.strokeEnabled,
+        strokeColor: this.strokeColor,
+        strokeWidth: this.strokeWidth
       })
     }
   }
@@ -443,7 +469,10 @@ struct BarrageSegmentItem {
             gradientDirection: this.gradientDirection,
             textOpacity: this.blinkOpacity,
             hasShadow: this.segment.hasShadow,
-            isVertical: true
+            isVertical: true,
+            strokeEnabled: this.strokeEnabled,
+            strokeColor: this.strokeColor,
+            strokeWidth: this.strokeWidth
           })
         } else {
           NormalText({
@@ -459,7 +488,10 @@ struct BarrageSegmentItem {
             decorationColor: this.segment.fontColor,
             textOpacity: this.blinkOpacity,
             hasShadow: this.segment.hasShadow,
-            isVertical: true
+            isVertical: true,
+            strokeEnabled: this.strokeEnabled,
+            strokeColor: this.strokeColor,
+            strokeWidth: this.strokeWidth
           })
         }
       }, (char: string, index: number) => index.toString() + '_' + char)
@@ -520,7 +552,6 @@ struct LEDOverlay {
     const step = size + gap;
 
     ctx.clearRect(0, 0, width, height);
-
     ctx.globalCompositeOperation = 'source-over';
     ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
     ctx.fillRect(0, 0, width, height);
@@ -536,53 +567,41 @@ struct LEDOverlay {
     ctx.globalCompositeOperation = 'source-over';
   }
 
-  drawCircleLED(ctx: CanvasRenderingContext2D, width: number, height: number, size: number, gap: number, step: number) {
+  drawCircleLED(ctx: CanvasRenderingContext2D, width: number, height: number,
+    size: number, gap: number, step: number) {
     ctx.globalCompositeOperation = 'destination-out';
     ctx.fillStyle = 'rgba(255, 255, 255, 1)';
-
     for (let y = gap / 2; y < height; y += step) {
       for (let x = gap / 2; x < width; x += step) {
-        const centerX = x + size / 2;
-        const centerY = y + size / 2;
-        const radius = size / 2 * 0.9;
-
         ctx.beginPath();
-        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+        ctx.arc(x + size / 2, y + size / 2, size / 2 * 0.9, 0, Math.PI * 2);
         ctx.fill();
       }
     }
-
     ctx.globalCompositeOperation = 'source-over';
     ctx.strokeStyle = 'rgba(40, 40, 40, 0.6)';
     ctx.lineWidth = 0.5;
-
     for (let y = gap / 2; y < height; y += step) {
       for (let x = gap / 2; x < width; x += step) {
-        const centerX = x + size / 2;
-        const centerY = y + size / 2;
-        const radius = size / 2 * 0.9;
-
         ctx.beginPath();
-        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+        ctx.arc(x + size / 2, y + size / 2, size / 2 * 0.9, 0, Math.PI * 2);
         ctx.stroke();
       }
     }
   }
 
-  drawSquareLED(ctx: CanvasRenderingContext2D, width: number, height: number, size: number, gap: number, step: number) {
+  drawSquareLED(ctx: CanvasRenderingContext2D, width: number, height: number,
+    size: number, gap: number, step: number) {
     ctx.globalCompositeOperation = 'destination-out';
     ctx.fillStyle = 'rgba(255, 255, 255, 1)';
-
     for (let y = gap / 2; y < height; y += step) {
       for (let x = gap / 2; x < width; x += step) {
         ctx.fillRect(x, y, size, size);
       }
     }
-
     ctx.globalCompositeOperation = 'source-over';
     ctx.strokeStyle = 'rgba(40, 40, 40, 0.5)';
     ctx.lineWidth = 0.5;
-
     for (let y = gap / 2; y < height; y += step) {
       for (let x = gap / 2; x < width; x += step) {
         ctx.strokeRect(x, y, size, size);
@@ -590,26 +609,21 @@ struct LEDOverlay {
     }
   }
 
-  drawGridLED(ctx: CanvasRenderingContext2D, width: number, height: number, size: number, gap: number, step: number) {
+  drawGridLED(ctx: CanvasRenderingContext2D, width: number, height: number,
+    size: number, gap: number, step: number) {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
-
     for (let y = size; y < height; y += step) {
       ctx.fillRect(0, y, width, gap);
     }
-
     for (let x = size; x < width; x += step) {
       ctx.fillRect(x, 0, gap, height);
     }
-
     ctx.globalCompositeOperation = 'destination-out';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-
     for (let y = 0; y < height; y += step) {
       for (let x = 0; x < width; x += step) {
-        const centerX = x + size / 2;
-        const centerY = y + size / 2;
         ctx.beginPath();
-        ctx.arc(centerX, centerY, size * 0.35, 0, Math.PI * 2);
+        ctx.arc(x + size / 2, y + size / 2, size * 0.35, 0, Math.PI * 2);
         ctx.fill();
       }
     }
@@ -635,7 +649,6 @@ class Particle {
   scale: number = 1;
 
   constructor() {
-    // 空构造函数
   }
 
   init(w: number, h: number, type: string, isInitial: boolean): void {
@@ -774,7 +787,6 @@ struct ParticleOverlay {
     if (this.containerWidth <= 0 || this.containerHeight <= 0) {
       return;
     }
-
     this.particles = [];
     let count = Math.min(this.particleCount, 120);
     if (this.particleType === 'fire') {
@@ -782,7 +794,6 @@ struct ParticleOverlay {
     } else if (this.particleType === 'star') {
       count = Math.floor(Math.min(count * 0.6, 60));
     }
-
     for (let i = 0; i < count; i++) {
       const p = new Particle();
       p.init(this.containerWidth, this.containerHeight, this.particleType, true);
@@ -793,7 +804,6 @@ struct ParticleOverlay {
 
   startAnimation(): void {
     this.stopAnimation();
-
     const fps = this.particleType === 'fire' ? 40 : 30;
     this.animationTimer = setInterval(() => {
       this.draw();
@@ -811,24 +821,18 @@ struct ParticleOverlay {
     if (!this.isInitialized) {
       return;
     }
-
     const ctx = this.context;
     const w = this.containerWidth;
     const h = this.containerHeight;
-
     if (w <= 0 || h <= 0) {
       return;
     }
-
     ctx.clearRect(0, 0, w, h);
-
     for (let i = 0; i < this.particles.length; i++) {
       const p = this.particles[i];
       p.update(w, h);
-
       ctx.save();
       ctx.globalAlpha = p.alpha;
-
       if (this.particleType === 'sparkle') {
         this.drawSparkle(ctx, p);
       } else if (this.particleType === 'bubble') {
@@ -840,7 +844,6 @@ struct ParticleOverlay {
       } else if (this.particleType === 'star') {
         this.drawStar(ctx, p);
       }
-
       ctx.restore();
     }
   }
@@ -848,11 +851,9 @@ struct ParticleOverlay {
   drawSparkle(ctx: CanvasRenderingContext2D, p: Particle): void {
     ctx.fillStyle = p.color;
     const size = p.size * p.scale;
-
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.rotate(p.rotation);
-
     ctx.beginPath();
     for (let i = 0; i < 4; i++) {
       const angle = (i * Math.PI) / 2;
@@ -861,7 +862,6 @@ struct ParticleOverlay {
       const innerAngle = angle + Math.PI / 4;
       const innerX = Math.cos(innerAngle) * size * 0.3;
       const innerY = Math.sin(innerAngle) * size * 0.3;
-
       if (i === 0) {
         ctx.moveTo(outerX, outerY);
       } else {
@@ -871,30 +871,22 @@ struct ParticleOverlay {
     }
     ctx.closePath();
     ctx.fill();
-
     ctx.shadowColor = p.color;
     ctx.shadowBlur = size * 2;
     ctx.fill();
-
     ctx.restore();
   }
 
   drawBubble(ctx: CanvasRenderingContext2D, p: Particle): void {
     const size = p.size * p.scale;
-
-    const gradient = ctx.createRadialGradient(
-      p.x - size * 0.3, p.y - size * 0.3, 0,
-      p.x, p.y, size
-    );
+    const gradient = ctx.createRadialGradient(p.x - size * 0.3, p.y - size * 0.3, 0, p.x, p.y, size);
     gradient.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
     gradient.addColorStop(0.3, p.color);
     gradient.addColorStop(1, 'rgba(255, 255, 255, 0.1)');
-
     ctx.fillStyle = gradient;
     ctx.beginPath();
     ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
     ctx.fill();
-
     ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
     ctx.beginPath();
     ctx.arc(p.x - size * 0.35, p.y - size * 0.35, size * 0.15, 0, Math.PI * 2);
@@ -903,66 +895,53 @@ struct ParticleOverlay {
 
   drawFire(ctx: CanvasRenderingContext2D, p: Particle): void {
     const size = p.size * p.scale;
-
     const gradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, size);
     gradient.addColorStop(0, '#FFFF00');
     gradient.addColorStop(0.3, p.color);
     gradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
-
     ctx.fillStyle = gradient;
     ctx.beginPath();
     ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
     ctx.fill();
-
     ctx.shadowColor = '#FF4500';
     ctx.shadowBlur = size;
   }
 
   drawSnow(ctx: CanvasRenderingContext2D, p: Particle): void {
     const size = p.size * p.scale;
-
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.rotate(p.rotation);
-
     ctx.strokeStyle = p.color;
     ctx.lineWidth = 1;
     ctx.lineCap = 'round';
-
     for (let i = 0; i < 6; i++) {
       const angle = (i * Math.PI) / 3;
       ctx.save();
       ctx.rotate(angle);
-
       ctx.beginPath();
       ctx.moveTo(0, 0);
       ctx.lineTo(0, -size);
       ctx.stroke();
-
       ctx.beginPath();
       ctx.moveTo(0, -size * 0.5);
       ctx.lineTo(size * 0.3, -size * 0.7);
       ctx.moveTo(0, -size * 0.5);
       ctx.lineTo(-size * 0.3, -size * 0.7);
       ctx.stroke();
-
       ctx.restore();
     }
-
     ctx.restore();
   }
 
   drawStar(ctx: CanvasRenderingContext2D, p: Particle): void {
     const size = p.size * p.scale;
-
     ctx.fillStyle = p.color;
     ctx.shadowColor = p.color;
     ctx.shadowBlur = size * 3;
-
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.rotate(p.rotation);
-
     ctx.beginPath();
     for (let i = 0; i < 5; i++) {
       const outerAngle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
@@ -971,7 +950,6 @@ struct ParticleOverlay {
       const outerY = Math.sin(outerAngle) * size;
       const innerX = Math.cos(innerAngle) * size * 0.4;
       const innerY = Math.sin(innerAngle) * size * 0.4;
-
       if (i === 0) {
         ctx.moveTo(outerX, outerY);
       } else {
@@ -981,17 +959,12 @@ struct ParticleOverlay {
     }
     ctx.closePath();
     ctx.fill();
-
     ctx.restore();
   }
 }
 
 /**
- * 弹幕预览主组件 - 修复版本
- * 核心修复：
- * 1. 使用实际测量的 contentWidth/contentHeight 进行滚动判断
- * 2. 增加滚动缓冲区
- * 3. 修复渐变模式下的尺寸计算
+ * 弹幕预览主组件
  */
 @Component
 export struct BarragePreview {
@@ -1013,14 +986,16 @@ export struct BarragePreview {
   private scrollTimer: number = -1;
   private blinkTimer: number = -1;
   private isAppeared: boolean = false;
-
   private lastIsBlinking: boolean = false;
   private lastBlinkSpeed: number = 50;
+  private lastContentSignature: string = '';
+  private positionInitialized: boolean = false;
 
   aboutToAppear(): void {
     this.isAppeared = true;
     this.lastIsBlinking = this.config.isBlinking;
     this.lastBlinkSpeed = this.config.blinkSpeed;
+    this.lastContentSignature = this.buildContentSignature();
     this.startScrollAnimation();
     this.startBlinkAnimation();
   }
@@ -1051,7 +1026,13 @@ export struct BarragePreview {
         return;
       }
 
-      // 检查闪烁配置变化
+      const currentSignature = this.buildContentSignature();
+      if (currentSignature !== this.lastContentSignature) {
+        this.lastContentSignature = currentSignature;
+        this.positionInitialized = false;
+        this.initializePosition();
+      }
+
       if (this.lastIsBlinking !== this.config.isBlinking ||
         this.lastBlinkSpeed !== this.config.blinkSpeed) {
         this.lastIsBlinking = this.config.isBlinking;
@@ -1059,39 +1040,48 @@ export struct BarragePreview {
         this.startBlinkAnimation();
       }
 
+      if (this.containerWidth <= 0 || this.containerHeight <= 0) {
+        return;
+      }
+
       const speed = Math.max(1, this.config.scrollSpeed / 5);
+      const direction = this.config.scrollReverse ? -1 : 1;
 
       if (this.config.direction === 'horizontal') {
-        this.offsetX -= speed;
+        this.offsetX -= speed * direction;
 
-        // 保持垂直居中
         if (this.contentHeight > 0 && this.containerHeight > 0) {
           this.offsetY = (this.containerHeight - this.contentHeight) / 2;
         }
 
-        // 【关键修复】使用实际测量的 contentWidth，加上额外缓冲区
-        // 只有当内容完全滚出左侧时才重置
-        const effectiveWidth = this.contentWidth > 0 ? this.contentWidth : this.containerWidth;
-        const scrollBuffer = 50; // 额外缓冲区，确保内容完全滚出
-
-        if (this.offsetX < -(effectiveWidth + scrollBuffer)) {
-          // 从右侧屏幕外开始
-          this.offsetX = this.containerWidth + scrollBuffer;
+        if (this.contentWidth > 0) {
+          if (!this.config.scrollReverse) {
+            if (this.offsetX + this.contentWidth < 0) {
+              this.offsetX = this.containerWidth;
+            }
+          } else {
+            if (this.offsetX > this.containerWidth) {
+              this.offsetX = -this.contentWidth;
+            }
+          }
         }
       } else {
-        this.offsetY -= speed;
+        this.offsetY -= speed * direction;
 
-        // 保持水平居中
         if (this.contentWidth > 0 && this.containerWidth > 0) {
           this.offsetX = (this.containerWidth - this.contentWidth) / 2;
         }
 
-        // 使用实际测量的 contentHeight
-        const effectiveHeight = this.contentHeight > 0 ? this.contentHeight : this.containerHeight;
-        const scrollBuffer = 50;
-
-        if (this.offsetY < -(effectiveHeight + scrollBuffer)) {
-          this.offsetY = this.containerHeight + scrollBuffer;
+        if (this.contentHeight > 0) {
+          if (!this.config.scrollReverse) {
+            if (this.offsetY + this.contentHeight < 0) {
+              this.offsetY = this.containerHeight;
+            }
+          } else {
+            if (this.offsetY > this.containerHeight) {
+              this.offsetY = -this.contentHeight;
+            }
+          }
         }
       }
 
@@ -1132,25 +1122,20 @@ export struct BarragePreview {
   startBlinkAnimation(): void {
     if (this.blinkTimer !== -1) {
       clearInterval(this.blinkTimer);
+      this.blinkTimer = -1;
     }
 
     if (this.config.isBlinking) {
       const interval = Math.max(100, 1000 - this.config.blinkSpeed * 9);
-
       this.blinkTimer = setInterval(() => {
         if (!this.isAppeared) {
           return;
         }
-
         this.getUIContext()?.animateTo({
           duration: Math.min(200, interval / 3),
           curve: Curve.EaseInOut
         }, () => {
-          if (this.blinkOpacity > 0.5) {
-            this.blinkOpacity = 0;
-          } else {
-            this.blinkOpacity = 1;
-          }
+          this.blinkOpacity = this.blinkOpacity > 0.5 ? 0 : 1;
         });
       }, interval);
     } else {
@@ -1159,47 +1144,102 @@ export struct BarragePreview {
   }
 
   initializePosition(): void {
+    if (this.containerWidth <= 0 || this.containerHeight <= 0) {
+      return;
+    }
     if (this.config.direction === 'horizontal') {
       this.offsetX = this.containerWidth;
-      this.offsetY = (this.containerHeight - this.contentHeight) / 2;
+      this.offsetY = Math.max(0, (this.containerHeight - this.contentHeight) / 2);
     } else {
-      this.offsetX = (this.containerWidth - this.contentWidth) / 2;
+      this.offsetX = Math.max(0, (this.containerWidth - this.contentWidth) / 2);
       this.offsetY = this.containerHeight;
     }
+    this.positionInitialized = true;
+  }
+
+  private buildContentSignature(): string {
+    if (this.config.useAdvancedMode) {
+      const segmentSignature = this.config.segments.map((segment: BarrageSegment) =>
+      `${segment.text}|${segment.fontSize}|${segment.fontColor}|${segment.fontWeight}|${segment.fontStyle}|${segment.fontFamily}|${segment.decorationType}|${segment.hasShadow}`)
+        .join('||');
+      const gradientSignature = this.config.gradientColors
+        .map((stop: [string, number]) => `${stop[0]}@${stop[1]}`)
+        .join(',');
+      return `advanced:${segmentSignature}|${this.config.direction}|${this.config.gradientEnabled}|${gradientSignature}|${this.config.gradientDirection}|${this.config.strokeEnabled}|${this.config.mirrorMode}`;
+    }
+
+    const gradientSignature = this.config.gradientColors
+      .map((stop: [string, number]) => `${stop[0]}@${stop[1]}`)
+      .join(',');
+    return `simple:${this.config.text}|${this.config.fontSize}|${this.config.fontColor}|${this.config.fontWeight}|${this.config.fontStyle}|${this.config.fontFamily}|${this.config.letterSpacing}|${this.config.lineSpacing}|${this.config.decorationType}|${this.config.hasShadow}|${this.config.direction}|${this.config.gradientEnabled}|${gradientSignature}|${this.config.gradientDirection}|${this.config.strokeEnabled}|${this.config.strokeColor}|${this.config.strokeWidth}|${this.config.mirrorMode}`;
+  }
+
+  private getDisplayLines(): string[] {
+    if (this.config.multiLineEnabled) {
+      return this.config.getDisplayLines();
+    }
+    return this.getTextSafe().split('\n');
   }
 
   build() {
     Stack() {
-      // === 背景层 ===
       this.buildBackground()
 
-      // === 内容层 ===
-      Column() {
-        if (this.config.useAdvancedMode) {
-          this.buildAdvancedContent()
-        } else {
-          this.buildSimpleContent()
+      Stack() {
+        Stack() {
+          Column() {
+            if (this.config.useAdvancedMode) {
+              this.buildAdvancedContent()
+            } else {
+              this.buildSimpleContent()
+            }
+          }
+          .alignItems(HorizontalAlign.Center)
+          .onAreaChange((_oldArea: Area, newArea: Area) => {
+            const w = newArea.width as number;
+            const h = newArea.height as number;
+            if (w > 0 && h > 0) {
+              const widthChanged = Math.abs(w - this.contentWidth) > 0.5;
+              const heightChanged = Math.abs(h - this.contentHeight) > 0.5;
+              if (widthChanged || heightChanged) {
+                this.contentWidth = w;
+                this.contentHeight = h;
+                if (!this.positionInitialized ||
+                  (this.containerWidth > 0 && this.containerHeight > 0)) {
+                  this.initializePosition();
+                }
+              }
+            }
+          })
+
+          if (this.config.ledEnabled && this.contentWidth > 0 && this.contentHeight > 0) {
+            LEDOverlay({
+              density: this.config.ledDensity,
+              shape: this.config.ledShape,
+              spacing: this.config.ledSpacing,
+              containerWidth: this.contentWidth,
+              containerHeight: this.contentHeight
+            })
+              .width(this.contentWidth)
+              .height(this.contentHeight)
+          }
         }
+        .alignContent(Alignment.TopStart)
+        .clip(false)
+        .scale({
+          x: this.animScale * (this.config.mirrorMode ? -1 : 1),
+          y: this.animScale
+        })
+        .rotate({ angle: this.animRotate })
+        .translate({ y: this.animTranslateY })
       }
-      .alignItems(HorizontalAlign.Center)
-      .justifyContent(FlexAlign.Center)
-      .scale({ x: this.animScale, y: this.animScale })
-      .rotate({ angle: this.animRotate })
-      .translate({ y: this.animTranslateY })
+      .width(99999)
+      .height(99999)
+      .alignContent(Alignment.TopStart)
+      .clip(false)
       .position({ x: this.offsetX, y: this.offsetY })
-      .onAreaChange((oldArea: Area, newArea: Area) => {
-        const newWidth = newArea.width as number;
-        const newHeight = newArea.height as number;
 
-        // 【关键】更新实际内容尺寸
-        if (newWidth !== this.contentWidth || newHeight !== this.contentHeight) {
-          this.contentWidth = newWidth;
-          this.contentHeight = newHeight;
-        }
-      })
-
-      // === 粒子效果层 ===
-      if (this.config.particleEnabled) {
+      if (this.config.particleEnabled && this.containerWidth > 0 && this.containerHeight > 0) {
         ParticleOverlay({
           containerWidth: this.containerWidth,
           containerHeight: this.containerHeight,
@@ -1207,26 +1247,16 @@ export struct BarragePreview {
           particleCount: 50
         })
       }
-
-      // === LED 效果层 ===
-      if (this.config.ledEnabled) {
-        LEDOverlay({
-          density: this.config.ledDensity,
-          shape: this.config.ledShape,
-          spacing: this.config.ledSpacing,
-          containerWidth: this.containerWidth,
-          containerHeight: this.containerHeight
-        })
-      }
     }
     .width('100%')
     .height('100%')
     .clip(true)
-    .onAreaChange((oldArea: Area, newArea: Area) => {
+    .onAreaChange((_oldArea: Area, newArea: Area) => {
       const newWidth = newArea.width as number;
       const newHeight = newArea.height as number;
-
-      if (newWidth !== this.containerWidth || newHeight !== this.containerHeight) {
+      if (newWidth > 0 && newHeight > 0 &&
+        (Math.abs(newWidth - this.containerWidth) > 0.5 ||
+          Math.abs(newHeight - this.containerHeight) > 0.5)) {
         this.containerWidth = newWidth;
         this.containerHeight = newHeight;
         this.initializePosition();
@@ -1242,7 +1272,6 @@ export struct BarragePreview {
         .height('100%')
         .objectFit(ImageFit.Cover)
         .opacity(this.config.backgroundOpacity)
-
     } else if (this.config.backgroundType === 'video' && this.config.backgroundVideo !== '') {
       Video({
         src: this.config.backgroundVideo,
@@ -1255,7 +1284,6 @@ export struct BarragePreview {
         .controls(false)
         .objectFit(ImageFit.Cover)
         .muted(true)
-
     } else {
       Column()
         .width('100%')
@@ -1277,7 +1305,10 @@ export struct BarragePreview {
             blinkOpacity: this.blinkOpacity,
             gradientEnabled: this.config.gradientEnabled,
             gradientColors: this.config.gradientColors,
-            gradientDirection: this.config.gradientDirection
+            gradientDirection: this.config.gradientDirection,
+            strokeEnabled: this.config.strokeEnabled,
+            strokeColor: this.config.strokeColor,
+            strokeWidth: this.config.strokeWidth
           })
         }, (segment: BarrageSegment, index: number) => 'segment_' + index.toString())
       }
@@ -1292,7 +1323,10 @@ export struct BarragePreview {
             blinkOpacity: this.blinkOpacity,
             gradientEnabled: this.config.gradientEnabled,
             gradientColors: this.config.gradientColors,
-            gradientDirection: this.config.gradientDirection
+            gradientDirection: this.config.gradientDirection,
+            strokeEnabled: this.config.strokeEnabled,
+            strokeColor: this.config.strokeColor,
+            strokeWidth: this.config.strokeWidth
           })
         }, (segment: BarrageSegment, index: number) => 'segment_' + index.toString())
       }
@@ -1309,11 +1343,11 @@ export struct BarragePreview {
       }
     } else {
       Column() {
-        ForEach(this.getTextSafe().split('\n'), (line: string, index: number) => {
+        ForEach(this.getDisplayLines(), (line: string, index: number) => {
           Row() {
             this.buildTextItem(line, index)
           }
-        }, (line: string, index: number) => 'line_' + index.toString())
+        }, (line: string, index: number) => 'line_' + index.toString() + '_' + line)
       }
       .alignItems(HorizontalAlign.Center)
     }
@@ -1343,7 +1377,10 @@ export struct BarragePreview {
         gradientDirection: this.config.gradientDirection,
         textOpacity: this.blinkOpacity,
         hasShadow: this.config.hasShadow,
-        isVertical: this.config.direction === 'vertical'
+        isVertical: this.config.direction === 'vertical',
+        strokeEnabled: this.config.strokeEnabled,
+        strokeColor: this.config.strokeColor,
+        strokeWidth: this.config.strokeWidth
       })
     } else {
       NormalText({
@@ -1359,7 +1396,10 @@ export struct BarragePreview {
         decorationColor: this.config.fontColor,
         textOpacity: this.blinkOpacity,
         hasShadow: this.config.hasShadow,
-        isVertical: this.config.direction === 'vertical'
+        isVertical: this.config.direction === 'vertical',
+        strokeEnabled: this.config.strokeEnabled,
+        strokeColor: this.config.strokeColor,
+        strokeWidth: this.config.strokeWidth
       })
     }
   }

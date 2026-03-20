@@ -312,6 +312,32 @@ export class BarrageConfig {
   // 中间行放大倍数
   middleLineScale: number = 1.5;
 
+  // ===== 镜像模式 =====
+
+  // 是否启用镜像翻转 (举手机隔着玻璃给对方看)
+  mirrorMode: boolean = false;
+
+  // ===== 描边设置 =====
+
+  // 是否启用文字描边
+  strokeEnabled: boolean = false;
+
+  // 描边颜色
+  strokeColor: string = '#000000';
+
+  // 描边宽度
+  strokeWidth: number = 2;
+
+  // ===== 滚动方向反转 =====
+
+  // 是否反转滚动方向
+  scrollReverse: boolean = false;
+
+  // ===== 屏幕亮度 =====
+
+  // 全屏播放时屏幕亮度 (0-1)
+  brightness: number = 1;
+
   constructor(options?: Partial<BarrageConfig>) {
     if (options) {
       this.copyFromPartial(options);
@@ -675,7 +701,15 @@ export class BarrageConfig {
       
       // 系统设置
       orientationLock: this.orientationLock,
-      keepScreenOn: this.keepScreenOn
+      keepScreenOn: this.keepScreenOn,
+
+      // 镜像/描边/滚动反转/亮度
+      mirrorMode: this.mirrorMode,
+      strokeEnabled: this.strokeEnabled,
+      strokeColor: this.strokeColor,
+      strokeWidth: this.strokeWidth,
+      scrollReverse: this.scrollReverse,
+      brightness: this.brightness
     });
   }
 
@@ -763,6 +797,12 @@ export class BarrageConfig {
     if (source.specialLineType !== undefined) this.specialLineType = source.specialLineType;
     if (source.specialLineColor !== undefined) this.specialLineColor = source.specialLineColor;
     if (source.middleLineScale !== undefined) this.middleLineScale = source.middleLineScale;
+    if (source.mirrorMode !== undefined) this.mirrorMode = source.mirrorMode;
+    if (source.strokeEnabled !== undefined) this.strokeEnabled = source.strokeEnabled;
+    if (source.strokeColor !== undefined) this.strokeColor = source.strokeColor;
+    if (source.strokeWidth !== undefined) this.strokeWidth = source.strokeWidth;
+    if (source.scrollReverse !== undefined) this.scrollReverse = source.scrollReverse;
+    if (source.brightness !== undefined) this.brightness = source.brightness;
 
     // 处理数组
     if (source.gradientColors !== undefined) {
@@ -818,6 +858,12 @@ export class BarrageConfig {
     target.specialLineType = this.specialLineType;
     target.specialLineColor = this.specialLineColor;
     target.middleLineScale = this.middleLineScale;
+    target.mirrorMode = this.mirrorMode;
+    target.strokeEnabled = this.strokeEnabled;
+    target.strokeColor = this.strokeColor;
+    target.strokeWidth = this.strokeWidth;
+    target.scrollReverse = this.scrollReverse;
+    target.brightness = this.brightness;
     
     // 深拷贝数组
     target.segments = this.segments.map(s => s.clone());
