@@ -17,9 +17,7 @@ export class TemplateManager {
 
   async saveTemplate(name: string, config: BarrageConfig) {
     const pref = await this.getPreferences();
-    // Serialize config to JSON string
-    // Note: We need to handle circular references if any, but BarrageConfig is simple data
-    const jsonStr = JSON.stringify(config);
+    const jsonStr = config.toJSON();
     await pref.put(name, jsonStr);
     await pref.flush();
   }
@@ -29,10 +27,7 @@ export class TemplateManager {
     const jsonStr = await pref.get(name, '') as string;
     if (!jsonStr) return null;
     try {
-      const rawObj = JSON.parse(jsonStr) as BarrageConfig;
-      const config = new BarrageConfig();
-      config.copyFrom(rawObj);
-      return config;
+      return BarrageConfig.fromJSON(jsonStr);
     } catch (e) {
       console.error('Failed to parse template', e);
       return null;

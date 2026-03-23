@@ -25,20 +25,18 @@ export class FontManager {
 
   // 静态映射：英文文件名 -> 中文显示名
   private staticFontMap: Record<string, string> = {
-    'FangSong_GB2312': '仿宋',
-    'JingDianZhongYuan': '中圆',
-    'JingDianXiYuan': '细圆',
-    'JingDianZongYi': '综艺',
-    'JingDianQuTi': '趣体',
-    'MiNiJianXingKai': '简行楷'
-    // 在这里添加更多字体映射
+    'FeiYunTi': '飞云体',
+    'MaokenAssortedSans': '什锦黑',
+    'MaokenZhuyuanTi': '珠圆体',
+    'yuanqituantuan': '元气团团',
+    'SmileySans-Oblique': '得意黑',
+    'LXGWWenKai-Medium': '文楷',
   };
 
   private constructor() {
     // 初始化默认字体
     this.fontList = [
-      { familyName: 'HarmonyOS Sans', displayName: 'HarmonyOS Sans' },
-      { familyName: 'monospace', displayName: 'monospace' }
+      { familyName: 'HarmonyOS Sans', displayName: 'HarmonySans' },
     ];
   }
 

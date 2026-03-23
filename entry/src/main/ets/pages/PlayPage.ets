@@ -10,8 +10,11 @@ import { FontManager } from '../utils/FontManager';
 struct PlayPage {
   @State config: BarrageConfig = new BarrageConfig();
   @State fontsReady: boolean = false;
+  @State hudOpacity: number = 1;
+  @State showHud: boolean = true;
   private originalBrightness: number = -1;
   private fontManager: FontManager = FontManager.getInstance();
+  private hudTimer: number = -1;
 
   aboutToAppear() {
     const params = router.getParams() as Record<string, Object>;
@@ -24,6 +27,9 @@ struct PlayPage {
 
     // 确保字体已加载
     this.initFonts();
+
+    // 启动 HUD 淡出定时器
+    this.startHudFadeOut();
 
     let context = this.getUIContext().getHostContext() as common.UIAbilityContext;
     window.getLastWindow(context).then((win) => {
@@ -60,7 +66,29 @@ struct PlayPage {
     this.fontsReady = true;
   }
 
+  private startHudFadeOut(): void {
+    // 3秒后开始淡出
+    this.hudTimer = setTimeout(() => {
+      this.getUIContext()?.animateTo({
+        duration: 800,
+        curve: Curve.EaseOut
+      }, () => {
+        this.hudOpacity = 0;
+      });
+      // 动画完成后隐藏 HUD
+      setTimeout(() => {
+        this.showHud = false;
+      }, 800);
+    }, 2500);
+  }
+
   aboutToDisappear() {
+    // 清理定时器
+    if (this.hudTimer !== -1) {
+      clearTimeout(this.hudTimer);
+      this.hudTimer = -1;
+    }
+
     let context = this.getUIContext().getHostContext() as common.UIAbilityContext;
     window.getLastWindow(context).then((win) => {
       win.setPreferredOrientation(window.Orientation.PORTRAIT);
@@ -80,9 +108,64 @@ struct PlayPage {
     });
   }
 
+  private getDirectionText(): string {
+    return this.config.direction === 'horizontal' ? '横向' : '纵向';
+  }
+
+  private getAnimationText(): string {
+    const names: Record<string, string> = {
+      'none': '无', 'scale': '缩放', 'rotate': '旋转',
+      'jump': '跳跃', 'shake': '抖动', 'wave': '波浪'
+    };
+    return names[this.config.animationType] || '无';
+  }
+
   build() {
-    Column() {
+    Stack() {
+      // 弹幕内容
       BarragePreview({ config: this.config })
+
+      // HUD 信息 (顶部淡出)
+      if (this.showHud) {
+        Column({ space: 4 }) {
+          Row({ space: 16 }) {
+            // 速度
+            Row({ space: 4 }) {
+              Text('⚡').fontSize(12)
+              Text(`速度 ${this.config.scrollSpeed}`).fontSize(12).fontColor('#FFFFFF')
+            }
+            .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+            .backgroundColor('#00000066')
+            .borderRadius(12)
+
+            // 方向
+            Row({ space: 4 }) {
+              Text(this.config.direction === 'horizontal' ? '↔' : '↕').fontSize(12)
+              Text(this.getDirectionText()).fontSize(12).fontColor('#FFFFFF')
+            }
+            .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+            .backgroundColor('#00000066')
+            .borderRadius(12)
+
+            // 动画
+            if (this.config.animationType !== 'none') {
+              Row({ space: 4 }) {
+                Text('✨').fontSize(12)
+                Text(this.getAnimationText()).fontSize(12).fontColor('#FFFFFF')
+              }
+              .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+              .backgroundColor('#00000066')
+              .borderRadius(12)
+            }
+          }
+
+          Text('双击退出').fontSize(10).fontColor('#FFFFFF99')
+        }
+        .width('100%')
+        .padding({ top: 20 })
+        .alignItems(HorizontalAlign.Center)
+        .opacity(this.hudOpacity)
+      }
     }
     .width('100%')
     .height('100%')

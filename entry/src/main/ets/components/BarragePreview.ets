@@ -1262,6 +1262,34 @@ export struct BarragePreview {
         this.initializePosition();
       }
     })
+    .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean, currentRatio: number) => {
+      // 当组件可见度低于 50% 时暂停动画，恢复时重新启动
+      if (currentRatio < 0.5) {
+        this.pauseAnimations();
+      } else if (currentRatio >= 0.5 && this.isAppeared) {
+        this.resumeAnimations();
+      }
+    })
+  }
+
+  private pauseAnimations(): void {
+    if (this.scrollTimer !== -1) {
+      clearInterval(this.scrollTimer);
+      this.scrollTimer = -1;
+    }
+    if (this.blinkTimer !== -1) {
+      clearInterval(this.blinkTimer);
+      this.blinkTimer = -1;
+    }
+  }
+
+  private resumeAnimations(): void {
+    if (this.scrollTimer === -1) {
+      this.startScrollAnimation();
+    }
+    if (this.blinkTimer === -1 && this.config.isBlinking) {
+      this.startBlinkAnimation();
+    }
   }
 
   @Builder
@@ -1272,18 +1300,6 @@ export struct BarragePreview {
         .height('100%')
         .objectFit(ImageFit.Cover)
         .opacity(this.config.backgroundOpacity)
-    } else if (this.config.backgroundType === 'video' && this.config.backgroundVideo !== '') {
-      Video({
-        src: this.config.backgroundVideo,
-        controller: new VideoController()
-      })
-        .width('100%')
-        .height('100%')
-        .autoPlay(true)
-        .loop(true)
-        .controls(false)
-        .objectFit(ImageFit.Cover)
-        .muted(true)
     } else {
       Column()
         .width('100%')

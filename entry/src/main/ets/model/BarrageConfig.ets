@@ -231,9 +231,6 @@ export class BarrageConfig {
   // 背景图片
   backgroundImage: string | Resource = '';
 
-  // 背景视频
-  backgroundVideo: string | Resource = '';
-
   // 背景透明度 (0-1)
   backgroundOpacity: number = 1;
 
@@ -667,7 +664,6 @@ export class BarrageConfig {
       backgroundType: this.backgroundType,
       backgroundColor: this.backgroundColor,
       backgroundImage: this.backgroundImage,
-      backgroundVideo: this.backgroundVideo,
       backgroundOpacity: this.backgroundOpacity,
       backgroundBlur: this.backgroundBlur,
       
@@ -775,7 +771,6 @@ export class BarrageConfig {
     if (source.backgroundType !== undefined) this.backgroundType = source.backgroundType;
     if (source.backgroundColor !== undefined) this.backgroundColor = source.backgroundColor;
     if (source.backgroundImage !== undefined) this.backgroundImage = source.backgroundImage;
-    if (source.backgroundVideo !== undefined) this.backgroundVideo = source.backgroundVideo;
     if (source.backgroundOpacity !== undefined) this.backgroundOpacity = source.backgroundOpacity;
     if (source.backgroundBlur !== undefined) this.backgroundBlur = source.backgroundBlur;
     if (source.direction !== undefined) this.direction = source.direction;
@@ -836,7 +831,6 @@ export class BarrageConfig {
     target.backgroundType = this.backgroundType;
     target.backgroundColor = this.backgroundColor;
     target.backgroundImage = this.backgroundImage;
-    target.backgroundVideo = this.backgroundVideo;
     target.backgroundOpacity = this.backgroundOpacity;
     target.backgroundBlur = this.backgroundBlur;
     target.direction = this.direction;
