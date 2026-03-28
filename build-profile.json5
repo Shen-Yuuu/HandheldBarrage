@@ -1,10 +1,37 @@
 {
   "app": {
-    "signingConfigs": [],
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "E:/desktop/Code/harmony/HandheldBarrage/handheld.cer",
+          "keyAlias": "handheld",
+          "keyPassword": "00000019C1A649C8010DE576A3689A579F9B6906C00681B65E0EBA8BA17F62638A45CFC595F624E621",
+          "profile": "E:/desktop/Code/harmony/HandheldBarrage/handheldRelease.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "E:/desktop/Code/harmony/HandheldBarrage/handheld.p12",
+          "storePassword": "000000190100A649C74155FF5FA2F3B4B9D82744B264D2EA4D606B06960829D15F26442A1DD86DC3CA"
+        }
+      },
+      {
+        "name": "release",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "E:/desktop/Code/harmony/HandheldBarrage/handheld.cer",
+          "keyAlias": "handheld",
+          "keyPassword": "00000019C1A649C8010DE576A3689A579F9B6906C00681B65E0EBA8BA17F62638A45CFC595F624E621",
+          "profile": "E:/desktop/Code/harmony/HandheldBarrage/handheldRelease.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "E:/desktop/Code/harmony/HandheldBarrage/handheld.p12",
+          "storePassword": "000000190100A649C74155FF5FA2F3B4B9D82744B264D2EA4D606B06960829D15F26442A1DD86DC3CA"
+        }
+      }
+    ],
     "products": [
       {
         "name": "default",
-        "signingConfig": "default",
+        "signingConfig": "release",
         "targetSdkVersion": "6.0.1(21)",
         "compatibleSdkVersion": "6.0.1(21)",
         "runtimeOS": "HarmonyOS",
@@ -18,7 +45,7 @@
     ],
     "buildModeSet": [
       {
-        "name": "debug",
+        "name": "debug"
       },
       {
         "name": "release"
